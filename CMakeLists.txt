@@ -3,10 +3,10 @@ cmake_minimum_required(VERSION 3.8)
 
 
 # 项目名称
-set(PROJECT_VERSION_MAJOR 0)
-set(PROJECT_VERSION_MINOR 0)
-set(PROJECT_VERSION_PATCH 1)
-project(HookMouse VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
+set(PROJECT_CC_VERSION_MAJOR 0)
+set(PROJECT_CC_VERSION_MINOR 0)
+set(PROJECT_CC_VERSION_PATCH 1)
+project(xanadu-hook VERSION ${PROJECT_CC_VERSION_MAJOR}.${PROJECT_CC_VERSION_MINOR}.${PROJECT_CC_VERSION_PATCH})
 
 
 # 输出提示信息
@@ -16,29 +16,32 @@ message(STATUS "CMAKE_CXX_COMPILER : ${CMAKE_CXX_COMPILER}")
 
 
 # 配置文件
-if (_X_SERIES_BUILD_SHARED_LIBS STREQUAL "OFF" OR _X_SERIES_BUILD_STATIC_LIBS STREQUAL "ON")
-	set(XANADU_CORE_BUILD_REPLACE _XANADU_CORE_BUILD_STATIC)
+if (BUILD_SHARED_LIBS STREQUAL "OFF" OR BUILD_STATIC_LIBS STREQUAL "ON")
+	set(XANADU_HOOK_BUILD_REPLACE XANADU_HOOK_BUILD_STATIC)
 	set(X_SERIES_LIBRARY_TYPE "STATIC")
 else()
-	set(XANADU_CORE_BUILD_REPLACE _XANADU_CORE_BUILD_SHARED)
+	set(XANADU_HOOK_BUILD_REPLACE XANADU_HOOK_BUILD_SHARED)
 	set(X_SERIES_LIBRARY_TYPE "SHARED")
 endif ()
-set(XANADU_CORE_INCLUDE_REPLACE ${CMAKE_INSTALL_PREFIX}/include)
-set(XANADU_CORE_LIBRARY_REPLACE ${CMAKE_INSTALL_PREFIX}/lib)
-configure_file("${CMAKE_SOURCE_DIR}/config/Find${PROJECT_NAME}.cmake.in" "${CMAKE_BINARY_DIR}/Find${PROJECT_NAME}.cmake")
+set(XANADU_HOOK_INCLUDE_REPLACE ${CMAKE_INSTALL_PREFIX}/include)
+set(XANADU_HOOK_LIBRARY_REPLACE ${CMAKE_INSTALL_PREFIX}/lib)
+configure_file("${CMAKE_SOURCE_DIR}/config/${PROJECT_NAME}-config.cmake.in" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}-config.cmake")
 configure_file("${CMAKE_SOURCE_DIR}/config/${PROJECT_NAME}.pc.in" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pc")
 configure_file("${CMAKE_SOURCE_DIR}/config/VersionInfo.rc.in" "${CMAKE_BINARY_DIR}/VersionInfo.rc")
 
 
 # 设置模块搜索路径
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_INSTALL_PREFIX}/lib/cmake)
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${CMAKE_INSTALL_PREFIX}/lib/cmake)
+message(STATUS "CMAKE_MODULE_PATH : ${CMAKE_MODULE_PATH}")
+message(STATUS "CMAKE_PREFIX_PATH : ${CMAKE_PREFIX_PATH}")
 
 
 # 配置编译环境
 if (MSVC)
 	add_compile_options(/W4)
 else()
-	add_compile_options(-Wall)
+	add_compile_options(-Wall -fpermissive)
 endif()
 if (X_SERIES_LIBRARY_TYPE STREQUAL "STATIC")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -static")
@@ -57,39 +60,43 @@ message(STATUS "CMAKE_IGNORE_PATH : ${CMAKE_IGNORE_PATH}")
 
 # 项目依赖
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR})
+find_package(xanadu-posix REQUIRED)
 
 
 # C++支持
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
 
 
 # 头文件搜索目录
+include_directories(${PACKAGE_DIRECTORY_INCLUDE})
+include_directories(${XANADU_POSIX_INCLUDE})
 
 
 # 链接库搜索目录
+link_directories(${PACKAGE_DIRECTORY_LIBRARY})
+link_directories(${XANADU_POSIX_LIBRARY})
 
 
 # 宏定义
 if (X_SERIES_LIBRARY_TYPE STREQUAL "STATIC")
-	add_definitions(-D_XANADU_CORE_BUILD_STATIC)
+	add_definitions(-DXANADU_HOOK_BUILD_STATIC)
 else()
-	add_definitions(-D_XANADU_CORE_BUILD_SHARED)
+	add_definitions(-DXANADU_HOOK_BUILD_LOCAL)
 endif()
 add_definitions(-D_FILE_OFFSET_BITS=64)
-add_definitions(-D_XANADU_EXCEPTION_OUTPUT)
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 add_definitions(-D_WINSOCK_DEPRECATED_NO_WARNINGS)
 add_definitions(-D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING)
-add_definitions(-D_XANADU_LOG_ENABLE)
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-	add_definitions(-D_X_SERIES_BUILD_DEBUG)
-else ()
-	add_definitions(-D_X_SERIES_BUILD_RELEASE)
-endif ()
 
 
 # 包含源文件
 aux_source_directory(./source SRC)
+if (WIN32)
+	aux_source_directory(./source/arch/windows SRC)
+else()
+	aux_source_directory(./source/arch/other SRC)
+endif()
 if (MSVC)
 	list(APPEND SRC ${CMAKE_BINARY_DIR}/VersionInfo.rc)
 endif ()
@@ -97,7 +104,9 @@ endif ()
 
 # 链接库
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+	link_libraries(xanadu-posix-d)
 else ()
+	link_libraries(xanadu-posix)
 endif ()
 if (WIN32)
 	link_libraries("Ws2_32.lib")
@@ -129,8 +138,8 @@ endif()
 
 
 # 设置项目属性
-set_target_properties(${PROJECT_NAME} PROPERTIES VERSION 2.0.0 SOVERSION 2)
-set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX D)
+set_target_properties(${PROJECT_NAME} PROPERTIES SOVERSION ${PROJECT_CC_VERSION_MAJOR})
+set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX -d)
 
 
 if (X_SERIES_LIBRARY_TYPE STREQUAL "STATIC")
@@ -151,5 +160,5 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/${PROJECT_NAME} DESTINATION ${CM
 # 安装头文件
 #install(FILES ${PROJECT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 # 配置模块文件
-install(FILES ${CMAKE_BINARY_DIR}/Find${PROJECT_NAME}.cmake DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake)
+install(FILES ${CMAKE_BINARY_DIR}/${PROJECT_NAME}-config.cmake DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/cmake)
 install(FILES ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pc DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pkgconfig)
